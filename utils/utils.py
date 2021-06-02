@@ -140,9 +140,13 @@ def xywh2xyxy(x):
 #         return np.stack(((x1 + x2) / 2, (y1 + y2) / 2, x2 - x1, y2 - y1)).T
 
 
-def scale_coords(img1_shape, coords, img0_shape, ratio_pad=None):
+def scale_coords(img1_shape, coords, img0_shape, ratio_pad=None, noLetter=False):
     # Rescale coords (xyxy) from img1_shape to img0_shape
-    if ratio_pad is None:  # calculate from img0_shape
+    if noLetter:
+        gain = [img1_shape[1]/img0_shape[1], img1_shape[0]/img0_shape[0], img1_shape[1]/img0_shape[1], img1_shape[0]/img0_shape[0]]
+        gain = torch.Tensor(gain).to(coords.device)
+        pad = [0, 0]
+    elif ratio_pad is None:  # calculate from img0_shape
         gain = max(img1_shape) / max(img0_shape)  # gain  = old / new
         pad = (img1_shape[1] - img0_shape[1] * gain) / 2, (img1_shape[0] - img0_shape[0] * gain) / 2  # wh padding
     else:
@@ -878,7 +882,7 @@ def plot_images(imgs, targets, paths=None, fname='images.png'):
     fig = plt.figure(figsize=(10, 10))
     bs, _, h, w = imgs.shape  # batch size, _, height, width
     bs = min(bs, 16)  # limit plot to 16 images
-    ns = np.ceil(bs ** 0.5)  # number of subplots
+    ns = int(np.ceil(bs ** 0.5))  # number of subplots
 
     for i in range(bs):
         boxes = xywh2xyxy(targets[targets[:, 0] == i, 2:6]).T
