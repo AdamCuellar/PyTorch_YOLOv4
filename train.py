@@ -146,10 +146,10 @@ def train():
         mloss = torch.zeros(4, device=args.device)  # mean losses
         if args.global_rank != -1:
             dataloader.sampler.set_epoch(epoch)
-        pbar = dataloader
+        pbar = enumerate(dataloader)
         if args.global_rank in [-1, 0]:
             print(('\n' + '%10s' * 8) % ('Epoch', 'gpu_mem', 'GIoU', 'obj', 'cls', 'total', 'targets', 'img_size'))
-            pbar = enumerate(tqdm(pbar, total=numBatches))  # progress bar
+            pbar = tqdm(pbar, total=numBatches) # progress bar
         optimizer.zero_grad()
         for i, (imgs, targets, paths, _) in pbar:  # batch -------------------------------------------------------------
             ni = i + numBatches * epoch  # number integrated batches (since train start)
