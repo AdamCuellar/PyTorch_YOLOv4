@@ -29,6 +29,7 @@ def test(data,
          save_dir='',
          conf_thres=0.001,
          iou_thres=0.6,  # for NMS
+         merge=False,
          verbose=False):
     # Initialize/load model and set device
     training = model is not None
@@ -280,4 +281,5 @@ if __name__ == "__main__":
          save_dir=args.logdir,
          conf_thres=args.conf_thres,
          iou_thres=args.iou_thres,  # for NMS
-         verbose=args.verbose)
+         verbose=args.verbose,
+         merge=args.merge)

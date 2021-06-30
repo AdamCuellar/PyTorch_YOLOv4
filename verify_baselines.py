@@ -1,11 +1,13 @@
 import argparse
 from sys import platform
 
-from models import *  # set ONNX_EXPORT in models.py
+from utils.model import *
 from utils.datasets import *
-from utils.utils import *
+from utils.general import *
+import utils.torch_utils
 import json
-
+import torch
+torch.set_printoptions(precision=8)
 
 def detect(save_img=False):
     img_size = (opt.height, opt.width)
@@ -24,7 +26,7 @@ def detect(save_img=False):
     if weights.endswith('.pt'):  # pytorch format
         model.load_state_dict(torch.load(weights, map_location=device)['model'])
     else:  # darknet format
-        load_darknet_weights(model, weights)
+        model.load_darknet_weights(model, weights)
 
     # Fuse Conv2d + BatchNorm2d layers
     model.fuse()
@@ -38,10 +40,10 @@ def detect(save_img=False):
         model.half()
 
     # Set Dataloader
-    dataset = LoadImages(source, img_size=img_size)
+    dataset = LoadData(source, imgShape=img_size, test=True) # TODO: fix this
 
     # Get names and colors
-    names = load_classes(opt.names)
+    names = parse_names(opt.names)
     colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(names))]
 
     # Run inference
@@ -50,7 +52,9 @@ def detect(save_img=False):
     _ = model(img.half() if half else img.float()) if device.type != 'cpu' else None  # run once
     jdict = []
     coco91class = coco80_to_coco91_class()
+    numOver = 0
     for path, img, im0s, vid_cap in dataset:
+        print("########## Starting real image ################")
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
@@ -62,6 +66,7 @@ def detect(save_img=False):
         pred = model(img, augment=opt.augment)[0]
         t2 = torch_utils.time_synchronized()
 
+        print("Time: {}".format(t2-t1))
         # to float
         if half:
             pred = pred.float()
@@ -88,11 +93,16 @@ def detect(save_img=False):
                     scale_coords(img.shape[2:], box, im0.shape, noLetter=True)  # to original shape
                     box = xyxy2xywh(box)  # xywh
                     box[:, :2] -= box[:, 2:] / 2  # xy center to top-left corner
+                    count = 0
                     for pr, b in zip(det.tolist(), box.tolist()):
                         jdict.append({'image_id': image_id,
                                       'category_id': coco91class[int(pr[5])],
                                       'bbox': [round(x, 3) for x in b],
                                       'score': round(pr[4], 5)})
+                        count += 1
+
+                    if count > 100:
+                        numOver += 1
 
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
@@ -125,8 +135,10 @@ def detect(save_img=False):
             if save_img:
                 cv2.imwrite(save_path, im0)
 
+    print("Number of images with detections over 100: {}".format(numOver))
     if save_txt or save_img:
         print('Results saved to %s' % os.getcwd() + os.sep + out)
+
 
     # Save JSON
     if save_json:

@@ -335,7 +335,7 @@ class LoadData(torch.utils.data.Dataset):
         if doMosaic:
             img, labels = load_mosaic(index, self.imgPaths, self.labels, self.imgShape, aug=augmentFunc)
         else:
-            img = load_image(self.imgPaths[index], self.imgShape)
+            img, _, (h, w) = load_image(self.imgPaths[index], self.imgShape, resize=False)
             labels = self.labels[index].copy()
 
             if self.aug:
