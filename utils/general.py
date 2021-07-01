@@ -17,9 +17,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torchvision
-import yaml
-from scipy.cluster.vq import kmeans
-from scipy.signal import butter, filtfilt
 from tqdm import tqdm
 
 from utils.torch_utils import init_torch_seeds, is_parallel
@@ -243,7 +240,6 @@ def bbox_iou(box1, box2, x1y1x2y2=True, iou_type="ciou"):
     GIoU = "giou" in iou_type.lower()
     DIoU = "diou" in iou_type.lower()
     CIoU = "ciou" in iou_type.lower()
-    logCIoU = "logciou" in iou_type.lower()
 
     # Returns the IoU of box1 to box2. box1 is 4, box2 is nx4
     box2 = box2.T
@@ -268,27 +264,24 @@ def bbox_iou(box1, box2, x1y1x2y2=True, iou_type="ciou"):
     union = (w1 * h1 + 1e-16) + w2 * h2 - inter
 
     iou = inter / union  # iou
-    if GIoU or DIoU or CIoU or logCIoU:
+    if GIoU or DIoU or CIoU:
         cw = torch.max(b1_x2, b2_x2) - torch.min(b1_x1, b2_x1)  # convex (smallest enclosing box) width
         ch = torch.max(b1_y2, b2_y2) - torch.min(b1_y1, b2_y1)  # convex height
         if GIoU:  # Generalized IoU https://arxiv.org/pdf/1902.09630.pdf
             c_area = cw * ch + 1e-16  # convex area
             return iou - (c_area - union) / c_area  # GIoU
-        if DIoU or CIoU or logCIoU:  # Distance or Complete IoU https://arxiv.org/abs/1911.08287v1
+        if DIoU or CIoU:  # Distance or Complete IoU https://arxiv.org/abs/1911.08287v1
             # convex diagonal squared
             c2 = cw ** 2 + ch ** 2 + 1e-16
             # centerpoint distance squared
             rho2 = ((b2_x1 + b2_x2) - (b1_x1 + b1_x2)) ** 2 / 4 + ((b2_y1 + b2_y2) - (b1_y1 + b1_y2)) ** 2 / 4
             if DIoU:
                 return iou - rho2 / c2  # DIoU
-            elif CIoU or logCIoU:  # https://github.com/Zzh-tju/DIoU-SSD-pytorch/blob/master/utils/box/box_utils.py#L47
+            elif CIoU:  # https://github.com/Zzh-tju/DIoU-SSD-pytorch/blob/master/utils/box/box_utils.py#L47
                 v = (4 / math.pi ** 2) * torch.pow(torch.atan(w2 / h2) - torch.atan(w1 / h1), 2)
                 with torch.no_grad():
                     alpha = v / (1 - iou + v + 1e-16)
-                if logCIoU:
-                    return torch.log(iou + (rho2 / c2 + v * alpha))
-                else:
-                    return iou - (rho2 / c2 + v * alpha)  # CIoU
+                return iou - (rho2 / c2 + v * alpha)  # CIoU
 
     return iou
 
@@ -502,6 +495,8 @@ def parse_cfg(path):
         if line.startswith("["):
             modules.append(dict())
             modules[-1]['type'] = line[1:-1].strip()
+            if modules[-1]['type'] == 'convolutional':
+                modules[-1]['batch_normalize'] = 0  # pre-populate with zeros (may be overwritten later)
         else:
             key, val = line.split("=")
             key = key.strip()

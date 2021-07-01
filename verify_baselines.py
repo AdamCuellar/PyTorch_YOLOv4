@@ -20,13 +20,15 @@ def detect(save_img=False):
     os.makedirs(out)  # make new output folder
 
     # Initialize model
-    model = Darknet(opt.cfg, img_size)
+    modelDefs = parse_cfg(opt.cfg)
+    model = Darknet(modelDefs)
+    netParams = model.netParams
 
     # Load weights
     if weights.endswith('.pt'):  # pytorch format
         model.load_state_dict(torch.load(weights, map_location=device)['model'])
     else:  # darknet format
-        model.load_darknet_weights(model, weights)
+        model.load_darknet_weights(weights)
 
     # Fuse Conv2d + BatchNorm2d layers
     model.fuse()
@@ -40,7 +42,7 @@ def detect(save_img=False):
         model.half()
 
     # Set Dataloader
-    dataset = LoadData(source, imgShape=img_size, test=True) # TODO: fix this
+    dataset = LoadData(source, netParams, imgShape=img_size, test=True)
 
     # Get names and colors
     names = parse_names(opt.names)
@@ -53,31 +55,33 @@ def detect(save_img=False):
     jdict = []
     coco91class = coco80_to_coco91_class()
     numOver = 0
-    for path, img, im0s, vid_cap in dataset:
-        print("########## Starting real image ################")
-        img = torch.from_numpy(img).to(device)
+    for img, _, path, shape in dataset:
+        # print("########## Starting real image ################")
+        img = img.to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
         if img.ndimension() == 3:
             img = img.unsqueeze(0)
 
         # Inference
-        t1 = torch_utils.time_synchronized()
-        pred = model(img, augment=opt.augment)[0]
-        t2 = torch_utils.time_synchronized()
+        with torch.no_grad():
+            t1 = torch_utils.time_synchronized()
+            pred = model(img)[0]
+            t2 = torch_utils.time_synchronized()
 
-        print("Time: {}".format(t2-t1))
-        # to float
-        if half:
-            pred = pred.float()
+            # print("Time: {}".format(t2-t1), end="\r")
+            # to float
+            if half:
+                pred = pred.float()
 
-        # Apply NMS
-        pred = non_max_suppression(pred, opt.conf_thres, opt.iou_thres,
-                                   merge=False, classes=opt.classes, agnostic=opt.agnostic_nms)
+            # Apply NMS
+            pred = non_max_suppression(pred, opt.conf_thres, opt.iou_thres,
+                                       merge=False, classes=opt.classes, agnostic=opt.agnostic_nms)
 
         # Process detections
         for i, det in enumerate(pred):  # detections per image
-            p, s, im0 = path, '', im0s
+            p, s, sh = path, '', shape
+            im0 = img
 
             save_path = str(Path(out) / Path(p).name)
             s += '%gx%g ' % img.shape[2:]  # print string
@@ -90,7 +94,7 @@ def detect(save_img=False):
                     # [{"image_id": 42, "category_id": 18, "bbox": [258.15, 41.29, 348.26, 243.78], "score": 0.236}, ...
                     image_id = int(os.path.splitext(path.split("/")[-1])[0])
                     box = det1[:, :4].clone()  # xyxy
-                    scale_coords(img.shape[2:], box, im0.shape, noLetter=True)  # to original shape
+                    scale_coords(img.shape[2:], box, sh, noLetter=True)  # to original shape
                     box = xyxy2xywh(box)  # xywh
                     box[:, :2] -= box[:, 2:] / 2  # xy center to top-left corner
                     count = 0
@@ -105,7 +109,7 @@ def detect(save_img=False):
                         numOver += 1
 
                 # Rescale boxes from img_size to im0 size
-                det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
+                # det[:, :4] = scale_coords(img.shape[2:], det[:, :4], sh).round()
 
                 # Print results
                 for c in det[:, -1].unique():
@@ -118,7 +122,7 @@ def detect(save_img=False):
                         with open(save_path + '.txt', 'a') as file:
                             file.write(('%g ' * 6 + '\n') % (*xyxy, cls, conf))
 
-                    if True or save_img or view_img:  # Add bbox to image
+                    if save_img or view_img:  # Add bbox to image
                         label = '%s %.2f' % (names[int(cls)], conf)
                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)])
 
@@ -153,7 +157,7 @@ if __name__ == '__main__':
     parser.add_argument('--cfg', type=str, default='cfgs/yolov4.cfg', help='*.cfg path')
     parser.add_argument('--names', type=str, default='data/coco.names', help='*.names path')
     parser.add_argument('--weights', type=str, default='weights/yolov4.weights', help='weights path')
-    parser.add_argument('--source', type=str, default='/home/adam/PycharmProjects/PyTorch_YOLOv4_Darknet/data/testdev2017.txt', help='source')  # input file/folder, 0 for webcam
+    parser.add_argument('--source', type=str, default='data/coco2017.data', help='source')  # input file/folder, 0 for webcam
     parser.add_argument('--output', type=str, default='output', help='output folder')  # output folder
     parser.add_argument('--height', type=int, default=512, help='inference height (pixels)')
     parser.add_argument('--width', type=int, default=512, help='inference width (pixels)')

@@ -351,10 +351,10 @@ class LoadData(torch.utils.data.Dataset):
         if nL:
             labels_out[:, 1:] = torch.from_numpy(labels)
 
-        img = img[:,:,::-1] # flip to rgb
         shape = img.shape[:-1]
         detImg = cv2.resize(img, self.imgShape[::-1], interpolation=cv2.INTER_LINEAR)
-        detImg = detImg.transpose(2, 0, 1)
+        detImg = detImg[:, :, ::-1].transpose(2, 0, 1)
+        detImg = np.ascontiguousarray(detImg)
 
         # plot_images(np.expand_dims(detImg, 0), labels_out, fname="images_{}.jpg".format(index))
         return torch.from_numpy(detImg), labels_out, self.imgPaths[index], shape

@@ -3,6 +3,12 @@ import numpy as np
 import torch
 from torch import nn
 
+# try:
+#     from mish_cuda import MishCuda as Mish
+# except:
+Mish = nn.Mish
+
+
 def make_divisible(v, divisor):
     # Function ensures all layers have a channel number that is divisible by 8
     # https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet.py
@@ -341,12 +347,12 @@ class YOLOLayer(nn.Module):
         else:  # inference
             if self.new_coords:
                 io = p.sigmoid()
-                io[..., :2] = (self.scale_x_y * io[..., :2] - (-0.5 * (self.scale_x_y - 1)) + self.grid)
+                io[..., :2] = (self.scale_x_y * io[..., :2] - (0.5 * (self.scale_x_y - 1)) + self.grid)
                 io[..., 2:4] = (io[..., 2:4] * 2) ** 2 * self.anchor_wh
                 io[..., :4] *= self.stride
             else:
                 io = p.clone()  # inference output
-                io[..., :2] = self.scale_x_y * torch.sigmoid(io[..., :2]) - (-0.5 * (self.scale_x_y - 1)) + self.grid  # xy
+                io[..., :2] = self.scale_x_y * torch.sigmoid(io[..., :2]) - (0.5 * (self.scale_x_y - 1)) + self.grid  # xy
                 io[..., 2:4] = torch.exp(io[..., 2:4]) * self.anchor_wh  # wh yolo method
                 io[..., :4] *= self.stride
                 torch.sigmoid_(io[..., 4:])

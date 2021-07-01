@@ -1,10 +1,11 @@
 import math
+import os
 import numpy as np
 import torch
 import torch.nn as nn
 from utils import torch_utils
 from utils.layers import MixConv2d, DeformConv2d, FeatureConcat, FeatureConcat2, FeatureConcat3, FeatureConcat_l, Swish, \
-    WeightedFeatureFusion, YOLOLayer
+    WeightedFeatureFusion, YOLOLayer, Mish
 
 def create_modules(module_defs, img_size=None):
     # Constructs module list of layer blocks from module configuration in module_defs
@@ -48,7 +49,7 @@ def create_modules(module_defs, img_size=None):
             elif mdef['activation'] == 'swish':
                 modules.add_module('activation', Swish())
             elif mdef['activation'] == 'mish':
-                modules.add_module('activation', nn.Mish())
+                modules.add_module('activation', Mish())
 
         elif mdef['type'] == 'deformableconvolutional':
             bn = mdef['batch_normalize']
