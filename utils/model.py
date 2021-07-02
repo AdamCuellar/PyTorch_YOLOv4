@@ -196,7 +196,7 @@ class Darknet(nn.Module):
         self.seen = np.array([0], dtype=np.int64)  # (int64) number of images seen during training
         self.info(verbose)  # print model description
 
-    def forward(self, x, verbose=False, return_strides=False):
+    def forward(self, x, verbose=False, return_strides=False, study_preds=False):
         b, c, h, w = x.shape  # height, width
         yolo_out, out = [], []
         strides = []
@@ -214,7 +214,7 @@ class Darknet(nn.Module):
                 x = module(x, out)  # WeightedFeatureFusion(), FeatureConcat()
             elif name == 'YOLOLayer':
                 strides.append(h//x.shape[2])
-                yolo_out.append(module(x, out))
+                yolo_out.append(module(x, out, study_preds))
             else:  # run module directly, i.e. mtype = 'convolutional', 'upsample', 'maxpool', 'batchnorm2d' etc.
                 x = module(x)
 
@@ -225,8 +225,13 @@ class Darknet(nn.Module):
 
         if return_strides:
             return strides
+
         if self.training:  # train
             return yolo_out
+
+        if study_preds: # inference or test but cat
+            x, p = zip(*yolo_out)
+            return x, p
         else:  # inference or test
             x, p = zip(*yolo_out)  # inference output, training output
             x = torch.cat(x, 1)  # cat yolo outputs

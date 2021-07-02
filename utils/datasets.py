@@ -74,14 +74,20 @@ def create_dataloader(dataFile, netParams, batch_size, imgShape=None, valid=Fals
                                              collate_fn=LoadData.collate_fn)
     return dataloader, dataset
 
-def load_image(imgPath, img_size, resize=True):
-    img = cv2.imread(imgPath)
+def load_image(imgPath, img_size, imgType, resize=True):
+    readFlag = cv2.IMREAD_COLOR if imgType == np.uint8 else cv2.IMREAD_UNCHANGED
+    img = cv2.imread(imgPath, readFlag)
     imgH, imgW = img.shape[:2]
+
+    # TODO: add flag for the number of channels we want instead of forcing 3 channels
+    if img.ndim < 3:
+        img = np.dstack([img, img, img])
+
     if resize and (imgH != img_size[0] and imgW != img_size[1]):
         img = cv2.resize(img, (img_size[1], img_size[0]), interpolation=cv2.INTER_LINEAR)
     return img, (imgH, imgW), img.shape[:2]
 
-def load_mosaic(index, imgPaths, labels, img_size, aug=None):
+def load_mosaic(index, imgPaths, labels, img_size, imgType, aug=None):
     # loads images in a mosaic
     labels4 = []
     s = img_size
@@ -91,7 +97,7 @@ def load_mosaic(index, imgPaths, labels, img_size, aug=None):
         doResize = random.uniform(0, 1) > 0.25
 
         # Load image
-        img, _, (h, w) = load_image(imgPaths[index], img_size, resize=doResize)
+        img, _, (h, w) = load_image(imgPaths[index], img_size, imgType, resize=doResize)
 
         # Labels
         x = labels[index].copy()
@@ -285,11 +291,12 @@ def aug_func(img, labels, hue, saturation, exposure, resize):
     return img, labels
 
 class LoadData(torch.utils.data.Dataset):
-    def __init__(self, dataFile, netParams, imgShape=None, valid=False, test=False):
+    def __init__(self, dataFile, netParams, imgShape=None, valid=False, test=False, imgType=np.uint8):
         self.netParams = netParams
         self.imgShape = (self.netParams["height"], self.netParams["width"]) if imgShape is None else imgShape
         self.imgShape = np.asarray(self.imgShape)
         self.aug = not valid and not test # TODO: maybe add test-time augmentation?
+        self.imgType = imgType
         # get location of data file
         topPth = os.path.abspath(dataFile).replace(dataFile, "")
         dataInfo = parseDataFile(dataFile)
@@ -338,9 +345,9 @@ class LoadData(torch.utils.data.Dataset):
                                   resize=self.netParams["resize"])
 
         if doMosaic:
-            img, labels = load_mosaic(index, self.imgPaths, self.labels, self.imgShape, aug=augmentFunc)
+            img, labels = load_mosaic(index, self.imgPaths, self.labels, self.imgShape, self.imgType, aug=augmentFunc)
         else:
-            img, _, (h, w) = load_image(self.imgPaths[index], self.imgShape, resize=False)
+            img, _, (h, w) = load_image(self.imgPaths[index], self.imgShape, self.imgType, resize=False)
             labels = self.labels[index].copy()
 
             if self.aug:

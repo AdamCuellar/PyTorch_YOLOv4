@@ -334,7 +334,7 @@ class YOLOLayer(nn.Module):
             self.anchor_vec = self.anchor_vec.to(device)
             self.anchor_wh = self.anchor_wh.to(device)
 
-    def forward(self, p, out):
+    def forward(self, p, out, study_preds=False):
         bs, _, ny, nx = p.shape  # bs, 255, 13, 13
         if (self.nx, self.ny) != (nx, ny):
             self.create_grids((nx, ny), p.device)
@@ -344,16 +344,20 @@ class YOLOLayer(nn.Module):
 
         if self.training:
             return p
-        else:  # inference
+        else:  # inference output
             if self.new_coords:
-                io = p.sigmoid()
+                io = p.clone().sigmoid()
                 io[..., :2] = (self.scale_x_y * io[..., :2] - (0.5 * (self.scale_x_y - 1)) + self.grid)
                 io[..., 2:4] = (io[..., 2:4] * 2) ** 2 * self.anchor_wh
                 io[..., :4] *= self.stride
             else:
-                io = p.clone()  # inference output
+                io = p.clone()
                 io[..., :2] = self.scale_x_y * torch.sigmoid(io[..., :2]) - (0.5 * (self.scale_x_y - 1)) + self.grid  # xy
                 io[..., 2:4] = torch.exp(io[..., 2:4]) * self.anchor_wh  # wh yolo method
                 io[..., :4] *= self.stride
                 torch.sigmoid_(io[..., 4:])
-            return io.view(bs, -1, self.no), p
+
+            if study_preds: # keep structure
+                return io, p
+            else:
+                return io.view(bs, -1, self.no), p
