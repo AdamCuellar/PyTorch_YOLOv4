@@ -18,8 +18,11 @@ img_formats = ['.bmp', '.jpg', '.jpeg', '.png', '.tif', '.tiff', '.dng']
 
 def parsePathFile(topPth, path):
     """ Parses *.txt file with image paths"""
-    if os.path.isabs(path):
-        path = os.path.join(topPth, path)
+    if not os.path.isabs(path):
+        if os.path.basename(topPth) == os.path.split(path)[-2]:
+            path = os.path.join(topPth, os.path.split(path)[-1])
+        else:
+            path = os.path.join(topPth, path)
 
     path = str(Path(path))
     assert os.path.isfile(path), "File not found {}".format(path)
@@ -298,7 +301,10 @@ class LoadData(torch.utils.data.Dataset):
         self.aug = not valid and not test # TODO: maybe add test-time augmentation?
         self.imgType = imgType
         # get location of data file
-        topPth = os.path.abspath(dataFile).replace(dataFile, "")
+        if os.path.isabs(dataFile):
+            topPth = os.path.dirname(dataFile)
+        else:
+            topPth = os.path.abspath(dataFile).replace(dataFile, "")
         dataInfo = parseDataFile(dataFile)
         currSet = dataInfo["valid"] if valid or test else dataInfo["train"]
         imgPaths = parsePathFile(topPth, currSet)
