@@ -16,8 +16,11 @@ from utils.general import xyxy2xywh, torch_distributed_zero_first, plot_images
 
 img_formats = ['.bmp', '.jpg', '.jpeg', '.png', '.tif', '.tiff', '.dng']
 
-def parsePathFile(path):
+def parsePathFile(topPth, path):
     """ Parses *.txt file with image paths"""
+    if os.path.isabs(path):
+        path = os.path.join(topPth, path)
+
     path = str(Path(path))
     assert os.path.isfile(path), "File not found {}".format(path)
 
@@ -287,9 +290,11 @@ class LoadData(torch.utils.data.Dataset):
         self.imgShape = (self.netParams["height"], self.netParams["width"]) if imgShape is None else imgShape
         self.imgShape = np.asarray(self.imgShape)
         self.aug = not valid and not test # TODO: maybe add test-time augmentation?
+        # get location of data file
+        topPth = os.path.abspath(dataFile).replace(dataFile, "")
         dataInfo = parseDataFile(dataFile)
         currSet = dataInfo["valid"] if valid or test else dataInfo["train"]
-        imgPaths = parsePathFile(currSet)
+        imgPaths = parsePathFile(topPth, currSet)
         self.imgPaths, self.labels = [], []
 
         # verify dataset has images/truths
