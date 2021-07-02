@@ -352,6 +352,11 @@ class LoadData(torch.utils.data.Dataset):
 
         if doMosaic:
             img, labels = load_mosaic(index, self.imgPaths, self.labels, self.imgShape, self.imgType, aug=augmentFunc)
+            if len(labels):
+                labels[:, 1:5] = xyxy2xywh(labels[:, 1:5])  # convert xyxy to xywh
+                labels[:, [2, 4]] /= img.shape[0]  # normalized height 0-1
+                labels[:, [1, 3]] /= img.shape[1]  # normalized width 0-1
+
         else:
             img, _, (h, w) = load_image(self.imgPaths[index], self.imgShape, self.imgType, resize=False)
             labels = self.labels[index].copy()
@@ -360,11 +365,6 @@ class LoadData(torch.utils.data.Dataset):
                 img, labels = augmentFunc(img, labels)
 
         nL = len(labels)  # number of labels
-        if nL:
-            labels[:, 1:5] = xyxy2xywh(labels[:, 1:5])  # convert xyxy to xywh
-            labels[:, [2, 4]] /= img.shape[0]  # normalized height 0-1
-            labels[:, [1, 3]] /= img.shape[1]  # normalized width 0-1
-
         labels_out = torch.zeros((nL, 6))
         if nL:
             labels_out[:, 1:] = torch.from_numpy(labels)
