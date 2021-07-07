@@ -147,8 +147,8 @@ def build_targets(p, targets, model):
 
     return tcls, tbox, indices, anch
 
-
-def non_max_suppression(prediction, conf_thres=0.1, iou_thres=0.6, merge=False, classes=None, agnostic=False):
+def non_max_suppression(prediction, conf_thres=0.1, iou_thres=0.6, merge=False, classes=None,
+                        agnostic=False, nmsType="normal", beta1=0.6):
     """Performs Non-Maximum Suppression (NMS) on inference results
 
     Returns:
@@ -206,12 +206,17 @@ def non_max_suppression(prediction, conf_thres=0.1, iou_thres=0.6, merge=False, 
             continue
 
         # Sort by confidence
-        # x = x[x[:, 4].argsort(descending=True)]
+        x = x[x[:, 4].argsort(descending=True)]
 
         # Batched NMS
         c = x[:, 5:6] * (0 if agnostic else max_wh)  # classes
         boxes, scores = x[:, :4] + c, x[:, 4]  # boxes (offset by class), scores
-        i = torchvision.ops.boxes.nms(boxes, scores, iou_thres)
+
+        if "diounms" in nmsType or "greedynms" in nmsType:
+            i = box_diou(boxes, boxes, beta1) > iou_thres
+        else:
+            i = torchvision.ops.boxes.nms(boxes, scores, iou_thres)
+
         if i.shape[0] > max_det:  # limit detections
             i = i[:max_det]
         if merge and (1 < n < 3E3):  # Merge NMS (boxes merged using weighted mean)
@@ -234,6 +239,44 @@ def non_max_suppression(prediction, conf_thres=0.1, iou_thres=0.6, merge=False, 
 def smooth_BCE(eps=0.1):  # https://github.com/ultralytics/yolov3/issues/238#issuecomment-598028441
     # return positive, negative label smoothing BCE targets
     return 1.0 - 0.5 * eps, 0.5 * eps
+
+def box_diou(boxes1, boxes2, beta1=0.6):
+    # https://github.com/Zzh-tju/ultralytics-YOLOv3-Cluster-NMS/blob/1fa865b5b5f642fab6e7f79f2ab6901cc949edd1/utils/utils.py#L333
+    # https://github.com/pytorch/vision/blob/master/torchvision/ops/boxes.py
+    """
+    Return intersection-over-union (Jaccard index) of boxes.
+    Both sets of boxes are expected to be in (x1, y1, x2, y2) format.
+    Arguments:
+        boxes1 (Tensor[N, 4])
+        boxes2 (Tensor[M, 4])
+    Returns:
+        iou (Tensor[N, M]): the NxM matrix containing the pairwise
+            IoU values for every element in boxes1 and boxes2
+    """
+
+    def box_area(box):
+        # box = 4xn
+        return (box[2] - box[0]) * (box[3] - box[1])
+
+    area1 = box_area(boxes1.t())
+    area2 = box_area(boxes2.t())
+
+    lt = torch.max(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
+    rb = torch.min(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
+    clt=torch.min(boxes1[:, None, :2], boxes2[:, :2])
+    crb=torch.max(boxes1[:, None, 2:], boxes2[:, 2:])
+    x1=(boxes1[:, None, 0] + boxes1[:, None, 2])/2
+    y1=(boxes1[:, None, 1] + boxes1[:, None, 3])/2
+    x2=(boxes2[:, None, 0] + boxes2[:, None, 2])/2
+    y2=(boxes2[:, None, 1] + boxes2[:, None, 3])/2
+    d=(x1-x2.t())**2 + (y1-y2.t())**2
+    c=((crb-clt)**2).sum(dim=2)
+
+    inter = (rb - lt).clamp(min=0).prod(2)  # [N,M]
+    iou = inter / (area1[:, None] + area2 - inter)
+    if c == 0:
+        return iou
+    return iou - (d / c)**beta1  # iou = inter / (area1 + area2 - inter)
 
 def bbox_iou(box1, box2, x1y1x2y2=True, iou_type="ciou"):
 
@@ -275,7 +318,7 @@ def bbox_iou(box1, box2, x1y1x2y2=True, iou_type="ciou"):
             c2 = cw ** 2 + ch ** 2 + 1e-16
             # centerpoint distance squared
             rho2 = ((b2_x1 + b2_x2) - (b1_x1 + b1_x2)) ** 2 / 4 + ((b2_y1 + b2_y2) - (b1_y1 + b1_y2)) ** 2 / 4
-            if DIoU:
+            if DIoU: # TODO: this is wrong, requires a power of rho2/c2 (just use box_diou function)
                 return iou - rho2 / c2  # DIoU
             elif CIoU:  # https://github.com/Zzh-tju/DIoU-SSD-pytorch/blob/master/utils/box/box_utils.py#L47
                 v = (4 / math.pi ** 2) * torch.pow(torch.atan(w2 / h2) - torch.atan(w1 / h1), 2)
