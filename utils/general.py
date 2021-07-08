@@ -219,15 +219,12 @@ def non_max_suppression(prediction, conf_thres=0.1, iou_thres=0.6, merge=False, 
             i = torchvision.ops.boxes.nms(boxes, scores, iou_thres)
 
         if merge and (1 < n < 3E3):  # Merge NMS (boxes merged using weighted mean)
-            try:  # update boxes as boxes(i,4) = weights(i,n) * boxes(n,4)
-                iou = box_iou(boxes[i], boxes) > iou_thres  # iou matrix
-                weights = iou * scores[None]  # box weights
-                x[i, :4] = torch.mm(weights, x[:, :4]).float() / weights.sum(1, keepdim=True)  # merged boxes
-                if redundant:
-                    i = i[iou.sum(1) > 1]  # require redundancy
-            except:  # possible CUDA error https://github.com/ultralytics/yolov3/issues/1139
-                print(x, i, x.shape, i.shape)
-                pass
+            # update boxes as boxes(i,4) = weights(i,n) * boxes(n,4)
+            iou = box_iou(boxes[i], boxes) > iou_thres  # iou matrix
+            weights = iou * scores[None]  # box weights
+            x[i, :4] = torch.mm(weights, x[:, :4]).float() / weights.sum(1, keepdim=True)  # merged boxes
+            if redundant:
+                i = i[iou.sum(1) > 1]  # require redundancy
 
         output[xi] = x[i]
         if output[xi].shape[0] > max_det:  # limit detections
@@ -277,8 +274,6 @@ def box_diou(boxes1, boxes2, beta1=0.6):
 
     inter = (rb - lt).clamp(min=0).prod(2)  # [N,M]
     iou = inter / (area1[:, None] + area2 - inter)
-    if c == 0:
-        return iou
     return iou - (d / c)**beta1  # iou = inter / (area1 + area2 - inter)
 
 def bbox_iou(box1, box2, x1y1x2y2=True, iou_type="ciou"):
