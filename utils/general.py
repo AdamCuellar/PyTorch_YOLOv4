@@ -213,12 +213,11 @@ def non_max_suppression(prediction, conf_thres=0.1, iou_thres=0.6, merge=False, 
         boxes, scores = x[:, :4] + c, x[:, 4]  # boxes (offset by class), scores
 
         if "diounms" in nmsType or "greedynms" in nmsType:
-            i = box_diou(boxes, boxes, beta1) > iou_thres
+            iou = box_diou(boxes, boxes, beta1).triu_(diagonal=1)  # upper traingular iou matrix
+            i = iou.max(dim=0)[0] < iou_thres
         else:
             i = torchvision.ops.boxes.nms(boxes, scores, iou_thres)
 
-        if i.shape[0] > max_det:  # limit detections
-            i = i[:max_det]
         if merge and (1 < n < 3E3):  # Merge NMS (boxes merged using weighted mean)
             try:  # update boxes as boxes(i,4) = weights(i,n) * boxes(n,4)
                 iou = box_iou(boxes[i], boxes) > iou_thres  # iou matrix
@@ -231,7 +230,11 @@ def non_max_suppression(prediction, conf_thres=0.1, iou_thres=0.6, merge=False, 
                 pass
 
         output[xi] = x[i]
+        if output[xi].shape[0] > max_det:  # limit detections
+            output[xi] = output[xi][:max_det]
+
         if (time.time() - t) > time_limit:
+            print(f'WARNING: NMS time limit {time_limit}s exceeded')
             break  # time limit exceeded
 
     return output
