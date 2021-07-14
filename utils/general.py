@@ -61,10 +61,10 @@ def compute_loss(p, targets, model):  # predictions, targets, model
 
             pbox = torch.cat((pxy, pwh), 1).to(device)  # predicted box
             giou = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, iou_type=currYolo.iou_loss)  # giou(prediction, target)
-            lGiou = giou if "logciou" in currYolo.iou_loss else 1 - giou
-            lbox += (lGiou).mean() * currYolo.iou_normalizer # giou loss
+            giou = 1 - giou
+            lbox += (giou).mean() * currYolo.iou_normalizer # giou loss
 
-            # Objectness # TODO: objectness smooth?
+            # Objectness # TODO: objectness smooth? ignore_thresh?
             tobj[b, a, gj, gi] = (1.0 - model.gr) + model.gr * giou.detach().clamp(0).type(tobj.dtype)  # giou ratio
 
             # Classification
