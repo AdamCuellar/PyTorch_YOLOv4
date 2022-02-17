@@ -75,7 +75,7 @@ def test(data,
             model.half()
 
     # Configure
-    model.eval()
+    model.to(device).eval()
     nc = len(names) if not training else model.numClasses
     iouv = torch.linspace(0.5, 0.95, 10).to(device)  # iou vector for mAP@0.5:0.95
     niou = iouv.numel()

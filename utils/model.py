@@ -147,14 +147,13 @@ def create_modules(module_defs, img_size=None):
                                 img_size=img_size,  # (416, 416)
                                 yolo_index=yolo_index,  # 0, 1, 2...
                                 layers=layers,  # output layers
-                                scale_x_y=mdef["scale_x_y"],
-                                new_coords=mdef["new_coords"] if "new_coords" in mdef else 0,
-                                iou_loss=mdef["iou_loss"],
-                                iou_thresh=mdef["iou_thresh"],
-                                iou_normalizer=mdef["iou_normalizer"] if "iou_normalizer" in mdef else 1.,
-                                cls_normalizer=mdef["cls_normalizer"] if "cls_normalizer" in mdef else 1.,
-                                obj_normalizer=mdef["obj_normalizer"] if "obj_normalizer" in mdef else 1.)
-
+                                scale_x_y=mdef.get("scale_x_y", 1.),
+                                new_coords=mdef.get("new_coords", 0),
+                                iou_loss=mdef.get("iou_loss", "iou"),
+                                iou_thresh=mdef.get("iou_thresh", 1.),
+                                iou_normalizer=mdef.get("iou_normalizer", 1.),
+                                cls_normalizer=mdef.get("cls_normalizer", 1.),
+                                obj_normalizer=mdef.get("obj_normalizer", 1.))
 
             # # Initialize preceding Conv2d() bias (https://arxiv.org/pdf/1708.02002.pdf section 3.3)
             # try:
